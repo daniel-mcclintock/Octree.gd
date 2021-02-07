@@ -77,7 +77,7 @@ func insert(position : Vector3, data, mtx : Mutex) -> bool:
         # Store in _data
         mtx.lock()
 
-        if _data.has(position):
+        if _data.keys().has(position):
             # we already have this position
             mtx.unlock()
             return false
@@ -91,7 +91,7 @@ func insert(position : Vector3, data, mtx : Mutex) -> bool:
             # Transfor data from this node into its octant nodes
             for key in _data.keys():
                 var node = _octant_nodes[_get_octant_index(position, _center)]
-                node._data[position] = data
+                node._data[key] = _data[key]
 
             _data.clear()
 

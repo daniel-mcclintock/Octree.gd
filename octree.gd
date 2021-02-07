@@ -63,10 +63,8 @@ func instantiate_searcher(thread_queue: ThreadQueue) -> OctreeSearcher:
 func data_count() -> int:
     if not _octant_nodes.is_empty():
         var count := 0
-        for octant_array in _octant_nodes:
-            for node in octant_array:
-
-                count += node.data_count()
+        for octant_node in _get_flat_storage_array():
+            count += octant_node.data_count()
 
         return count
 
