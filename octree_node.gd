@@ -1,26 +1,40 @@
 class_name OctreeNode
 extends Reference
-# Shitty Octree for spatially storing data
+## Shitty Octree implementation for spatially storing data.
 
+## The center position of the OctreeNode volume.
 var _center : Vector3
+
+## The OctreeNode volume size.
 var _size : float
+
+## The OctreeNode volume size, halved.
 var _half_size : float
+
+## An [AABB] instance for this OctreeNode, used for intersection math.
+## This *might* be null if used externally.
 var _aabb
 
+## A [Dictionary] used for storing the data within this OctreeNode,
+## is empty when this OctreeNode is subdivided.
 var _data: Dictionary = {}
-var _positions: Array = []
+
+## An [Array] for storing this OctreeNode octant children,
+## is empty until this OctreeNode is subdividied.
 var _octant_nodes : Array = []
 
-var _item_count : int = 0
+## The maximum number of items this OctreeNode can store before being subdividied.
 var max_items : int
+
 
 func _init(center: Vector3 = Vector3.ZERO, size: float = 1.0, _max_items: int = 1000):
     max_items = _max_items
-
     _center = center
     _size = size
     _half_size = _size * 0.5
 
+
+## Helper method for recursively counting the number of items stored within this OctreeNode.
 func data_count() -> int:
     if not _octant_nodes.is_empty():
         var count = 0
@@ -29,26 +43,24 @@ func data_count() -> int:
 
         return count
     else:
-        return _positions.size()
+        return _data.size()
 
+
+## Generate, store and return AABB for native intersection math
 func _get_aabb() -> AABB:
-    # Generate, store and return AABB for native intersection math
     if _aabb:
         return _aabb
 
     _aabb = AABB(_center - Vector3.ONE * _half_size, Vector3.ONE * _size)
     return _aabb
 
-func check_bounds_point(vec: Vector3) -> bool:
-    return _get_aabb().has_point(vec)
 
-func add(position : Vector3, data, mtx : Mutex) -> bool:
-    # Add data to this Node for a given Vector3 position
-    #
-    # Args:
-    #     position: The position to store the given data for
-    #     data: A object/variant to store in the Octree
-    #     mtx: A Mutex to lock the Octree for threaded insertions
+## Add data to this Node for a given Vector3 position
+func insert(position : Vector3, data, mtx : Mutex) -> bool:
+    if not _get_aabb().has_point(position):
+        # Early exit if this position is not valid for this OctreeNode
+        return false
+
     if not _octant_nodes.is_empty():
         # We have children so offload to them
         mtx.lock()
@@ -59,41 +71,37 @@ func add(position : Vector3, data, mtx : Mutex) -> bool:
             # Position is outside of Octree Node area
             return false
 
-        return node.add(position, data, mtx)
+        return node.insert(position, data, mtx)
     else:
         # Add this request payload to appropriate node
         # Store in _data
         mtx.lock()
 
-        if _positions.has(position):
+        if _data.has(position):
             # we already have this position
             mtx.unlock()
             return false
 
-        _positions.append(position)
         _data[position] = data
-        _item_count += 1
 
-        if _item_count == max_items:
+        if _data.size() >= max_items:
             # Too much data, spawn octant nodes and shuffle data to them
             _create_octant_nodes()
 
             # Transfor data from this node into its octant nodes
             for key in _data.keys():
                 var node = _octant_nodes[_get_octant_index(position, _center)]
-                node._positions.append(position)
                 node._data[position] = data
-                node._item_count += 1
 
             _data.clear()
-            _positions.clear()
-            _item_count = 0
 
         mtx.unlock()
         return true
 
+
+## Compute the index of this OctreeNode's _octant_nodes Array that would store the given position.
+## the computed index aligns with the _octant_nodes Array order.
 static func _get_octant_index(position: Vector3, center: Vector3) -> int:
-    # Given a Vector3 position, determine which of this Node's octants would store that position
     var oct = 0
 
     if position.x >= center.x:
@@ -107,8 +115,9 @@ static func _get_octant_index(position: Vector3, center: Vector3) -> int:
 
     return oct
 
+
+## Create child Nodes for this Octree Node, produces 8 octant child Nodes.
 func _create_octant_nodes() -> void:
-    # Create child Nodes for this Octree Node, produces 8 octant child Nodes.
     var n_size = _half_size
     var n_hsize = n_size * 0.5
 #
@@ -133,15 +142,11 @@ func _create_octant_nodes() -> void:
             OctreeNode.new(n_center, n_size, max_items)
         )
 
+
+## Given a ray (origin, direction), find all intersecting OctreeNodes.
+## The grow argument will increase the size of the underlying AABB's for more generous ray
+## intersections, this is useful for volume "ray" hits.
 func _ray_nodes(origin: Vector3, direction: Vector3, grow: float = 0.0) -> Array:
-    # Given a ray (origin, direction) find all intersecting octree nodes.
-    #
-    # Args:
-    #     origin: The start position of the ray
-    #     direction: The direction of the ray
-    #     grow: Value to increase the size of each Node's AABB when picking ray intersections,
-    #           this is useful when a given ray would exclude a Node that would otherwise include
-    #           positions for a given search radius(see: searcher.gd)
     if _octant_nodes.is_empty():
         # This node has no children and therefore stores data, return self
         if _get_aabb().grow(grow).intersects_ray(origin, direction):
@@ -157,11 +162,9 @@ func _ray_nodes(origin: Vector3, direction: Vector3, grow: float = 0.0) -> Array
 
     return []
 
+
+## Given a AABB, find all intersecting OctreeNodes.
 func _aabb_nodes(aabb: AABB) -> Array:
-    # Given an AABB, find all intersecting Octree nodes.
-    #
-    # Args:
-    #     aabb: The AABB to find all intersecting Nodes for.
     if _octant_nodes.is_empty():
         # This node has no children and therefore stores data, return self
         if _get_aabb().intersects(aabb):
