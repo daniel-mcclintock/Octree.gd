@@ -52,7 +52,6 @@ func _init(center := Vector3.ZERO, size := 1.0, max_items := 1000):
 func instantiate_searcher(thread_queue: ThreadQueue) -> OctreeSearcher:
     _searcher = OctreeSearcher.new(
         _get_flat_storage_array(),
-        _get_flat_mutex_array(),
         thread_queue
     )
 
