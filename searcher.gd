@@ -31,10 +31,10 @@ var radial_distance_accumulator := 0.0
 var search_start_time := 0.0
 var attempts = 0
 
-func _init(octrees: Array, thread_queue: ThreadQueue, mutexes: Array):
-    _octrees = octrees
+func _init(octree: Octree, thread_queue: ThreadQueue):
+    _octrees = octree._get_flat_storage_array()
+    _mutexes = octree._get_flat_mutex_array()
     _thread_queue = thread_queue
-    _mutexes = mutexes
 
 func _callback(results: Array) -> void:
     _mtx.lock()
@@ -88,7 +88,7 @@ func camera_volume_ray(camera: Camera3D, cone: float, radial_distance: float, ca
             radial_distance == last_radial_distance and
             cone == last_cone and
             last_mouse_position == mouse_position):
-                if not _search_results.is_empty() or attempts >= 10:
+                if not _search_results.is_empty() or attempts >= 20:
                     last_radial_distance = radial_distance
                     last_camera_origin = _current_sort_origin
                     last_camera_forward = camera_forward
